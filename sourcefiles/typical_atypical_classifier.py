@@ -1,5 +1,6 @@
 import sys
 import csv
+import os
 from sourcefiles.cosine_similarity import get_cosine_similarity
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -340,7 +341,8 @@ class TypicalClassifier:
 
 
 def write_csv(path, header, rows):
-    with open(path, 'w') as csvfile:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w+') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(header)
         csvwriter.writerows(rows)
