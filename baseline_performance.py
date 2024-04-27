@@ -24,17 +24,15 @@ def participant_path_to_participant(participant_clip_directory: str) -> Particip
         new_clip = Clip(feature_avgs_all_layers, clip_path)
         clips_list.append(new_clip)
     print(f"Feature extraction for participant {participant_id} done.")
-    return Participant(participant_id=participant_id, group_label=group_label, clips=clips_list)
+    return Participant(participant_id=participant_id, group_label=group_label, clips=clips_list, age=0, gender="male")
 
 
 with Pool(os.cpu_count()) as pool:
     participants = pool.map(
         participant_path_to_participant,
-        [
-            path for path in [
-                os.path.join(root, dir) for root, dirs, files in os.walk("./data") for dir in dirs
-            ] if "ASD-Mono" in path or "NT-Mono" in path
-        ]
+        [path for path in [
+            os.path.join(root, dir) for root, dirs, files in os.walk("./data/andy_prosody") for dir in dirs
+        ] if "ASD-Mono/" in path or "NT-Mono/" in path]
     )
 
 
