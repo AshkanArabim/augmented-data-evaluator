@@ -1,4 +1,5 @@
-import os, threading
+import os
+from multiprocessing import Pool
 
 from sourcefiles.feature_extractor import FeatureExtractor
 from sourcefiles.typical_atypical_classifier import Clip
@@ -8,38 +9,37 @@ from sourcefiles.typical_atypical_classifier import TypicalClassifier
 
 feature_extractor = FeatureExtractor()
 
-NT_dir = os.path.join("data", "andy_prosody", "NT-Mono")
-ASD_dir = os.path.join("data", "andy_prosody", "ASD-Mono")
-NT_participant_clip_ids = os.listdir(NT_dir)
-ASD_participant_clip_ids = os.listdir(ASD_dir)
 
-
-# load NT participants
-def extract_group_features(parent_dir: str, participant_ids: list, group_label: str):
-    group_participants = []
-    for participant_id in participant_ids:
-        print(f"Starting feature extraction for participant {participant_id}...")
-        participant_clip_directory = os.path.join(parent_dir, participant_id)
-        clips_list = []
-        for clip_filename in os.listdir(participant_clip_directory):
-            clip_path = os.path.join(participant_clip_directory, clip_filename)
-            # debug
-            print(f"Extracting features from: {clip_path}")
-            feature_avgs_all_layers = feature_extractor.get_features_averages_from_fp(clip_path)
-            new_clip = Clip(feature_avgs_all_layers, clip_path)
-            clips_list.append(new_clip)
-        group_participants.append(Participant(participant_id=participant_id, group_label=group_label, clips=clips_list))
-        print(f"Feature extraction for participant {participant_id} done.")
+def participant_path_to_participant(participant_clip_directory: str) -> Participant:
+    levels = participant_clip_directory.split('/')
+    participant_id = levels[-1]
+    group_label = levels[-2]
     
-    return group_participants
+    print(f"Starting feature extraction for participant {participant_id}...")
+    clips_list = []
+    for clip_filename in os.listdir(participant_clip_directory):
+        clip_path = os.path.join(participant_clip_directory, clip_filename)
+        print(f"Extracting features from: {clip_path}")
+        feature_avgs_all_layers = feature_extractor.get_features_averages_from_fp(clip_path)
+        new_clip = Clip(feature_avgs_all_layers, clip_path)
+        clips_list.append(new_clip)
+    print(f"Feature extraction for participant {participant_id} done.")
+    return Participant(participant_id=participant_id, group_label=group_label, clips=clips_list)
 
 
-participants = extract_group_features(NT_dir, NT_participant_clip_ids, "NT")
-participants += extract_group_features(ASD_dir, ASD_participant_clip_ids, "ASD")
+with Pool(os.cpu_count()) as pool:
+    participants = pool.map(
+        participant_path_to_participant,
+        [
+            path for path in [
+                os.path.join(root, dir) for root, dirs, files in os.walk("./data") for dir in dirs
+            ] if "ASD-Mono" in path or "NT-Mono" in path
+        ]
+    )
 
 
 # classifier
-classifier = TypicalClassifier(participants, 'NT', 'ASD')
+classifier = TypicalClassifier(participants, "NT-Mono", "ASD-Mono")
 classifier.run()
 classifier.write_all_csv_results("results/", "baseline")
 
