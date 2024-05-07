@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchaudio
-
+from torch import multiprocessing
 
 class FeatureExtractor:
     """
@@ -16,6 +16,8 @@ class FeatureExtractor:
     def __init__(self, bundle='hubert_l'):
         torch.random.manual_seed(0)  # Sets the same random weights everytime the model is run.
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # CUDA uses GPUs for computations.
+        # self.device = "cpu"
+        # multiprocessing.set_start_method('spawn')
         self.bundle = self.get_bundle(bundle)
         self.model = self.bundle.get_model().to(self.device)
         self.print_info()
@@ -76,19 +78,7 @@ class FeatureExtractor:
         list is a numpy array of size 1024 representing the average values of the 1024
         features the SSL models calculate per frame of the audio clip.
         """
-        all_tl_averages = []
-        for layer in transformation_layers:
-            layer = torch.squeeze(layer, dim=0) # get rid of first dimension
-            tl_averages = [] # will hold averages for this one transformation layer
-            num_features = layer.shape[1] # columns
-            num_frames = layer.shape[0] # rows
-            for feature_idx in range(num_features):
-                feature_sum = 0
-                for frame_idx in range(num_frames):
-                    feature_sum += layer[frame_idx, feature_idx].item()
-                tl_averages.append(feature_sum / num_frames)
-            all_tl_averages.append(np.array(tl_averages))
-        return all_tl_averages
+        return torch.mean(torch.stack(transformation_layers, dim=0).squeeze().to(self.device), dim=1)
 
     """
     We found the 24th layer had the highest correlation to our human judgement sessions
@@ -105,6 +95,7 @@ class FeatureExtractor:
         layer = transformation_layers[23] # use only the 24th layer
         return self.get_features_averages_from_tl([layer])[0]
 
+# cmt: optimized till here ^^
     def plot_layers(self, features):
         """
         Visualizes transformation layers from an audio file.
