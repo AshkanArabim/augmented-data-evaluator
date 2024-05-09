@@ -3,6 +3,10 @@ import csv
 import os
 from sourcefiles.cosine_similarity import get_cosine_similarity
 from sklearn.neighbors import KNeighborsClassifier
+# from multiprocessing import Pool
+# import torch
+# from torch.multiprocessing import Pool
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 # ques: WHY do we need cosine similarity for knn? this makes no damn sense
@@ -27,7 +31,7 @@ def get_knn_predictions(test_list, train_list, labels, k):
     :return: a list of strings signifying if each features averages in the test
     list was given a prediction of SLI or TD.
     """
-    knn = KNeighborsClassifier(n_neighbors=k, metric=cosine_similarity_knn)
+    knn = KNeighborsClassifier(n_neighbors=k, metric=cosine_similarity_knn, n_jobs=-1)
     knn.fit(train_list, labels)
     return knn.predict(test_list)
 
@@ -165,8 +169,18 @@ class ParticipantResults:
 
 
 class TypicalClassifier:
-    def __init__(self, participants_list, typical_label, atypical_label, num_layers=24, k=7):
-        self.participants_list = participants_list  # list of Participant objects
+    def __init__(self, participants_list, typical_label, atypical_label, non_aug_participants: list = None, 
+                aug_participants: list = None, num_layers=24, k=7):
+        
+        if participants_list == None: # when using augmented for train, and original for test
+            if None in [non_aug_participants, aug_participants]:
+                raise ValueError("must pass both non_aug_participants and aug_participants if participants_list is None")
+            
+            self.non_aug_participants = non_aug_participants
+            self.aug_participants = aug_participants
+        else:
+            self.participants_list = participants_list  # list of Participant objects
+        
         self.typical_label = typical_label
         self.atypical_label = atypical_label
         self.num_layers = num_layers
@@ -178,8 +192,26 @@ class TypicalClassifier:
         }
 
     def run(self):
-        self.process_all_participants()
+        if hasattr(self, 'non_aug_participants'):
+            print("Augmented and non-augmented datasets detected. Using hybrid evaluation.")
+            self.process_all_participants_hybrid()
+        else:
+            self.process_all_participants()
         self.print_results()
+    
+    def process_all_participants_hybrid(self):
+        """
+        Very similar to `process_all_participants`, but instead iterates over
+        non_aug_participants to test them on knn trained on aug_participants.
+        :return:
+        """
+        # select one of the non-augmented participants for testing
+        for participant in self.non_aug_participants:
+            if participant.participant_id in self.seen_participant_ids:
+                print(f'ERROR participant {participant.participant_id} already processed. Duplicate IDs')
+                sys.exit()
+            self.seen_participant_ids.add(participant.participant_id)
+            self.process_single_participant_hybrid(participant)
 
     def process_all_participants(self):
         for participant in self.participants_list:
@@ -188,7 +220,37 @@ class TypicalClassifier:
                 sys.exit()
             self.seen_participant_ids.add(participant.participant_id)
             self.process_single_participant(participant)
+    
+    def process_single_participant_hybrid(self, non_aug_participant):
+        """
+        Same as `process_single_participang`, but uses augmented participants
+        for training and normal participants for testing.
+        """
+        participant_id = non_aug_participant.participant_id
+        
+        # if participant_id in self.seen_participant_ids:
+        #     print(f'ERROR participant {participant_id} already processed. Duplicate IDs')
+        #     sys.exit()
+        # self.seen_participant_ids.add(participant_id)
+        
+        group_label = non_aug_participant.group_label
+        print(f"processing participant {participant_id} (hybrid method)")
 
+        test_clips, test_clips_names, train_clips, train_labels = self.get_train_test_hybrid(participant_id)
+        predictions = self.get_predictions(test_clips, train_clips, train_labels)
+
+        non_aug_participant.add_results(group_label, predictions, test_clips_names)
+
+        outcome = 'winners' if non_aug_participant.results.winner else 'losers'
+        label_type = 'typical' if non_aug_participant.group_label == self.typical_label else 'atypical'
+
+        # Increment the total outcome counter
+        self.counters[outcome]['total'] += 1
+
+        # Increment the specific label type outcome counter
+        self.counters[outcome][label_type] += 1
+    
+    # cmt: this CAN'T be parallelized since it stores the knn in a single object for the whole class...
     def process_single_participant(self, participant):
         """
         makes a single participant be the test data while the rest of the participants
@@ -198,6 +260,12 @@ class TypicalClassifier:
         :return:
         """
         participant_id = participant.participant_id
+        
+        # if participant_id in self.seen_participant_ids:
+        #     print(f'ERROR participant {participant_id} already processed. Duplicate IDs')
+        #     sys.exit()
+        # self.seen_participant_ids.add(participant_id)
+        
         group_label = participant.group_label
         print(f"processing participant {participant_id}")
 
@@ -215,6 +283,28 @@ class TypicalClassifier:
         # Increment the specific label type outcome counter
         self.counters[outcome][label_type] += 1
 
+    # TODO: this would benefit from a dictionary data structure instead of lists
+    def get_train_test_hybrid(self, participant_id):
+        """
+        Same as `get_train_test`, but sources the train data from augmented
+        participants, and the test data from non-augmented participants.
+        :param participant_id: participant_id of participant to be tested
+        :return: test_clips, test_clip_names, train_clips, train_labels
+        """
+        test_clips = []
+        test_clips_names = []
+        train_clips = []
+        train_labels = []
+        # assuming exact parity between 
+        for (aug_participant, non_aug_participant) in zip(self.aug_participants, self.non_aug_participants):
+            if non_aug_participant.participant_id == participant_id:
+                test_clips = non_aug_participant.clips
+                test_clips_names = [clip.clip_name for clip in test_clips]
+            else:
+                train_clips += aug_participant.clips
+                train_labels += [aug_participant.group_label for _ in range(aug_participant.get_num_clips())]
+        return test_clips, test_clips_names, train_clips, train_labels
+    
     def get_train_test(self, participant_id):
         """
         given a participant id this method will separate the test and train clips
@@ -332,6 +422,10 @@ class TypicalClassifier:
         write_csv(csv_path, header, rows)
 
     def write_all_csv_results(self, directory, project_name):
+        # TODO: is solution can have unwanted consequences
+        if hasattr(self, "non_aug_participants"):
+            self.participants_list = self.non_aug_participants
+        
         self.write_layer_results_csv(directory + project_name + '_layers.csv')
         self.write_age_results_csv(directory + project_name + '_age.csv')
         self.write_gender_results_csv(directory + project_name + '_gender.csv')
