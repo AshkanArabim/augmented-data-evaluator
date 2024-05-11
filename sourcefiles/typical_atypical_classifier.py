@@ -2,11 +2,7 @@ import sys
 import csv
 import os
 from sourcefiles.cosine_similarity import get_cosine_similarity
-from sklearn.neighbors import KNeighborsClassifier
-# from multiprocessing import Pool
-# import torch
-# from torch.multiprocessing import Pool
-# torch.multiprocessing.set_sharing_strategy('file_system')
+import torch
 
 
 # ques: WHY do we need cosine similarity for knn? this makes no damn sense
@@ -31,9 +27,33 @@ def get_knn_predictions(test_list, train_list, labels, k):
     :return: a list of strings signifying if each features averages in the test
     list was given a prediction of SLI or TD.
     """
-    knn = KNeighborsClassifier(n_neighbors=k, metric=cosine_similarity_knn, n_jobs=-1)
-    knn.fit(train_list, labels)
-    return knn.predict(test_list)
+    # cmt: dim of train_list & test_list = [<num_clips>, 1024]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    train_list = torch.tensor(train_list).to(device)
+    test_list = torch.tensor(test_list).to(device)
+    
+    # get the indices of K nearest neighbors to each of our test clips
+    # distances dim: [test_list, train_list]
+    distances = torch.cosine_similarity(train_list[None, :, :], test_list[:, None, :], dim=-1)
+    
+    # get neighbors with highest cosine similarity
+    # dim: [test_list, k]
+    _, nearest_indices = torch.topk(distances, k=k, dim=-1)
+    
+    # map all indices to the corresponding class
+    # labels are received as strings, so we first convert them to integers
+    labels_int_to_string = tuple(set(labels))
+    labels_string_to_int = {s: i for i, s in enumerate(labels_int_to_string)}
+    int_labels = torch.tensor([labels_string_to_int[s] for s in labels]).to(device)
+    nearest_int_labels = int_labels[nearest_indices]
+    
+    # get the most common label for each inference input
+    knn_results, _ = torch.mode(nearest_int_labels)
+    
+    # changes int labels back to string
+    knn_results = [labels_int_to_string[i] for i in knn_results]
+    
+    return knn_results
 
 
 class Participant:
@@ -250,7 +270,7 @@ class TypicalClassifier:
         # Increment the specific label type outcome counter
         self.counters[outcome][label_type] += 1
     
-    # cmt: this CAN'T be parallelized since it stores the knn in a single object for the whole class...
+    # cmt: okay it doesn't have a global KNN, so why this deadlocks is beyond me
     def process_single_participant(self, participant):
         """
         makes a single participant be the test data while the rest of the participants
