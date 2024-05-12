@@ -46,8 +46,14 @@ def speakers_and_orders_match(p1_list: list[Participant], p2_list: list[Particip
     
 
 # make two lists for augmented and normal participants
+# non_aug_participants = get_participants_from_ds_path("./data/andy_prosody")
+# aug_participants = get_participants_from_ds_path("./data/andy_prosody")
+
 non_aug_participants = get_participants_from_ds_path("./data/andy_prosody_minimal")
 aug_participants = get_participants_from_ds_path("./data/andy_prosody_minimal_augmented")
+
+# non_aug_participants = get_participants_from_ds_path("./data/andy_prosody")
+# aug_participants = get_participants_from_ds_path("./data/andy_prosody")
 
 # check if the participants order and names match EXACTLY
 if not speakers_and_orders_match(non_aug_participants, aug_participants):

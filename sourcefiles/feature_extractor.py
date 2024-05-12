@@ -36,7 +36,7 @@ class FeatureExtractor:
         print(f"Sample Rate: {self.bundle.sample_rate}")
         print(f"model class: {self.model.__class__}")
 
-    def get_transformation_layers(self, path, plot_layers=False):
+    def get_transformation_layers(self, path, plot_layers=False) -> torch.tensor:
         """
         Passes an audio file to a self-supervised machine learning model.
         :param path: path of the audio file : String
@@ -59,7 +59,7 @@ class FeatureExtractor:
         if plot_layers: self.plot_layers(features)
         return features
 
-    def get_features_averages_from_fp(self, file_path):
+    def get_features_averages_from_fp(self, file_path) -> torch.tensor: # (tensor on gpu)
         """
         Calculates feature averages from all 24 transformation layers given the file path.
         :param file_path: location where the audio clip is stored.
@@ -70,7 +70,7 @@ class FeatureExtractor:
         transformation_layers = self.get_transformation_layers(file_path)
         return self.get_features_averages_from_tl(transformation_layers)
 
-    def get_features_averages_from_tl(self, transformation_layers):
+    def get_features_averages_from_tl(self, transformation_layers) -> torch.tensor:
         """
         Calculates feature averages of each transformation layer given a list of transformation layers.
         :param transformation_layers: a list of transformation layers.
@@ -105,7 +105,7 @@ class FeatureExtractor:
         fig, ax = plt.subplots(len(features), 1, figsize=(16, 4.3 * len(features)))
         for i, feats in enumerate(features):
             ax[i].imshow(feats[0].cpu(), interpolation="nearest")
-            ax[i].set_title(f"Feature from transformer layer {i + 1}")
+            ax[i].set_title(f"Feature from transformer layer {i}")
             ax[i].set_xlabel("Feature dimension")
             ax[i].set_ylabel("Frame (time-axis)")
         plt.tight_layout()
