@@ -230,25 +230,24 @@ class TypicalClassifier:
         if hasattr(self, 'non_aug_participants'):
             print("Augmented and non-augmented datasets detected. Using hybrid evaluation.")
             # FIXME: revert
-            # self.process_all_participants_hybrid()
+            self.process_all_participants_hybrid()
         else:
             self.process_all_participants()
         self.print_results()
     
-    # FIXME: revert
-    # def process_all_participants_hybrid(self):
-    #     """
-    #     Very similar to `process_all_participants`, but instead iterates over
-    #     non_aug_participants to test them on knn trained on aug_participants.
-    #     :return:
-    #     """
-    #     # select one of the non-augmented participants for testing
-    #     for participant in self.non_aug_participants:
-    #         if participant.participant_id in self.seen_participant_ids:
-    #             print(f'ERROR participant {participant.participant_id} already processed. Duplicate IDs')
-    #             sys.exit()
-    #         self.seen_participant_ids.add(participant.participant_id)
-    #         self.process_single_participant_hybrid(participant)
+    def process_all_participants_hybrid(self):
+        """
+        Very similar to `process_all_participants`, but instead iterates over
+        non_aug_participants to test them on knn trained on aug_participants.
+        :return:
+        """
+        # select one of the non-augmented participants for testing
+        for participant in self.non_aug_participants:
+            if participant.participant_id in self.seen_participant_ids:
+                print(f'ERROR participant {participant.participant_id} already processed. Duplicate IDs')
+                sys.exit()
+            self.seen_participant_ids.add(participant.participant_id)
+            self.process_single_participant_hybrid(participant)
 
     def process_all_participants(self):
         for participant in self.participants_list:
@@ -257,11 +256,7 @@ class TypicalClassifier:
                 sys.exit()
             self.seen_participant_ids.add(participant.participant_id)
             self.process_single_participant(participant)
-    
-    # FIXME: revert
-    # def process_single_participant_hybrid_new(self, non_aug_participant):
-    #     # FIXME:
-    #     pass
+        
     
     # def process_single_participant_new(self, participant):
     #     # FIXME: (done)
@@ -293,12 +288,12 @@ class TypicalClassifier:
     #     test_clips, test_clips_names, train_clips, train_labels = self.get_train_test(participant_id)
         
     # FIXME: revert
-    # def process_single_participant_hybrid(self, non_aug_participant):
+    def process_single_participant_hybrid(self, non_aug_participant):
     #     # note: ported till here ^^
-    #     """
-    #     Same as `process_single_participang`, but uses augmented participants
-    #     for training and normal participants for testing.
-    #     """
+        """
+        Same as `process_single_participang`, but uses augmented participants
+        for training and normal participants for testing.
+        """
     #     participant_id = non_aug_participant.participant_id
         
     #     # if participant_id in self.seen_participant_ids:
@@ -322,6 +317,26 @@ class TypicalClassifier:
 
     #     # Increment the specific label type outcome counter
     #     self.counters[outcome][label_type] += 1
+    
+        participant_id = non_aug_participant.participant_id
+        
+        group_label = non_aug_participant.group_label
+        print(f"processing participant {participant_id}")
+
+        test_clips, test_clips_names, train_clips, train_labels = self.get_train_test_hybrid(participant_id)
+        predictions = self.get_predictions(test_clips, train_clips, train_labels)
+
+        non_aug_participant.add_results(group_label, predictions, test_clips_names)
+
+        outcome = 'winners' if non_aug_participant.results.winner else 'losers'
+        label_type = 'typical' if non_aug_participant.group_label == self.typical_label else 'atypical'
+
+        # Increment the total outcome counter
+        self.counters[outcome]['total'] += 1
+        # note: ported till here ^^, vv is in progress
+
+        # Increment the specific label type outcome counter
+        self.counters[outcome][label_type] += 1
     
     # cmt: okay it doesn't have a global KNN, so why this deadlocks is beyond me
     def process_single_participant(self, participant):
@@ -358,27 +373,51 @@ class TypicalClassifier:
         self.counters[outcome][label_type] += 1
 
     # TODO: this would benefit from a dictionary data structure instead of lists
-    # FIXME: revert
-    # def get_train_test_hybrid(self, participant_id):
-    #     """
-    #     Same as `get_train_test`, but sources the train data from augmented
-    #     participants, and the test data from non-augmented participants.
-    #     :param participant_id: participant_id of participant to be tested
-    #     :return: test_clips, test_clip_names, train_clips, train_labels
-    #     """
-    #     test_clips = []
-    #     test_clips_names = []
-    #     train_clips = []
-    #     train_labels = []
-    #     # assuming exact parity between 
-    #     for (aug_participant, non_aug_participant) in zip(self.aug_participants, self.non_aug_participants):
-    #         if non_aug_participant.participant_id == participant_id:
-    #             test_clips = non_aug_participant.clips
-    #             test_clips_names = [clip.clip_name for clip in test_clips]
-    #         else:
-    #             train_clips += aug_participant.clips
-    #             train_labels += [aug_participant.group_label for _ in range(aug_participant.get_num_clips())]
-    #     return test_clips, test_clips_names, train_clips, train_labels
+    def get_train_test_hybrid(self, participant_id):
+        """
+        Same as `get_train_test`, but sources the train data from augmented
+        participants, and the test data from non-augmented participants.
+        :param participant_id: participant_id of participant to be tested
+        :return: test_clips, test_clip_names, train_clips, train_labels
+        """
+        # test_clips = []
+        # test_clips_names = []
+        # train_clips = []
+        # train_labels = []
+        # # assuming exact parity between 
+        # for (aug_participant, non_aug_participant) in zip(self.aug_participants, self.non_aug_participants):
+        #     if non_aug_participant.participant_id == participant_id:
+        #         test_clips = non_aug_participant.clips
+        #         test_clips_names = [clip.clip_name for clip in test_clips]
+        #     else:
+        # note: comparison pointer
+        #         train_clips += aug_participant.clips
+        #         train_labels += [aug_participant.group_label for _ in range(aug_participant.get_num_clips())]
+        # return test_clips, test_clips_names, train_clips, train_labels
+    
+        # ported stuff -----------------------
+        
+        # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
+        # test_clips_names dim: [<num_clips_test>] (stores the literal wav paths)
+        # train_clips dim: [24, <num_clips_train>, 1024] (each person can have multiple)
+        # train_labels dim: [<num_clips_train>]
+        
+        test_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
+        test_clips_names = []
+        train_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
+        train_labels = []
+        
+        for (aug_participant, non_aug_participant) in zip(self.aug_participants, self.non_aug_participants):
+            if non_aug_participant.participant_id == participant_id:
+                test_clips = torch.cat([clip.layers.to(DEVICE)[:, None, :] for clip in non_aug_participant.clips], dim=1)
+                test_clips_names = [clip.clip_name for clip in non_aug_participant.clips]
+            else:
+                # adding new clips to the end of what we already have, just like append
+                train_clips = torch.cat([train_clips] + [clip.layers.to(DEVICE)[:, None, :] for clip in aug_participant.clips], dim=1)
+                train_labels += [aug_participant.group_label for _ in range(aug_participant.get_num_clips())]
+        
+        return test_clips, test_clips_names, train_clips, train_labels
+    
     
     def get_train_test(self, participant_id):
         """
@@ -398,6 +437,7 @@ class TypicalClassifier:
         #         test_clips = participant.clips
         #         test_clips_names = [clip.clip_name for clip in test_clips]
         #     else:
+        # note: comparison pointer
         #         train_clips += participant.clips
         #         train_labels += [participant.group_label for _ in range(participant.get_num_clips())]
         # return test_clips, test_clips_names, train_clips, train_labels
