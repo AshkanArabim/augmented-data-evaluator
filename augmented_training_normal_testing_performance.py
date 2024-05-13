@@ -43,15 +43,21 @@ def speakers_and_orders_match(p1_list: list[Participant], p2_list: list[Particip
     p1_ids = [p1.participant_id for p1 in p1_list]
     p2_ids = [p2.participant_id for p2 in p2_list]
     
-    if sorted(p1_ids) != sorted(p2_ids):
+    if p1_ids != p2_ids:
         return False
     
     return True
     
 
 # make two lists for augmented and normal participants
-non_aug_participants = get_participants_from_ds_path("./data/andy_prosody_minimal")
-aug_participants = get_participants_from_ds_path("./data/andy_prosody_minimal_augmented")
+non_aug_participants = sorted(
+    get_participants_from_ds_path("./data/andy_prosody"),
+    key=lambda p: p.participant_id
+)
+aug_participants = sorted(
+    get_participants_from_ds_path("./data/andy_prosody_augmented_ASD_&_NT"),
+    key=lambda p: p.participant_id
+)
 
 
 feature_extractor = None # to free up the GPU
@@ -60,9 +66,9 @@ torch.cuda.empty_cache()
 del feature_extractor
 
 
-# # check if the participants order and names match EXACTLY
-# if not speakers_and_orders_match(non_aug_participants, aug_participants):
-#     raise ValueError("Participants order and names do not match.")
+# check if the participants order and names match EXACTLY
+if not speakers_and_orders_match(non_aug_participants, aug_participants):
+    raise ValueError("Participants order and names do not match.")
 
 # classifier
 classifier = TypicalClassifier(None, "NT-Mono", "ASD-Mono", 
