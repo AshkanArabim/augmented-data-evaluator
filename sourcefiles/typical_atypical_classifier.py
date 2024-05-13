@@ -294,8 +294,6 @@ class TypicalClassifier:
         :param train_labels:
         :return:
         """
-        print("--- start of knn for all 24 ---")
-        
         # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
         # test_clips_names dim: [<num_clips_test>] (stores the literal wav paths)
         # train_clips dim: [24, <num_clips_train>, 1024] (each person can have multiple)
@@ -322,13 +320,10 @@ class TypicalClassifier:
         
         # get the most common label for each inference input
         # dim: [<num_clips_test>]
-        # cmt: this was called knn_results in get_knn_predictions()
         predictions, _ = torch.mode(nearest_int_labels, dim=-1)
         
         # changes int labels back to string
         predictions = np.vectorize(lambda x: labels_int_to_string[x])(np.asarray(predictions.to("cpu")))
-        
-        print("--- end of knn for all 24 ---")
         
         return list(predictions)
 
