@@ -1,10 +1,15 @@
 import os, gc
 import torch
+import time
 
 from sourcefiles.feature_extractor import FeatureExtractor
 from sourcefiles.typical_atypical_classifier import Clip
 from sourcefiles.typical_atypical_classifier import Participant
 from sourcefiles.typical_atypical_classifier import TypicalClassifier
+
+
+# start timer
+t0 = time.time()
 
 
 feature_extractor = FeatureExtractor()
@@ -46,3 +51,7 @@ classifier = TypicalClassifier(participants, "NT-Mono", "ASD-Mono")
 classifier.run()
 classifier.write_all_csv_results("results/", "andy_prosody")
 
+
+# end timer
+t1 = time.time()
+print(f"time taken: {t1 - t0}")
