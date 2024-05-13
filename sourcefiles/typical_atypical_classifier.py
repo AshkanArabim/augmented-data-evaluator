@@ -1,7 +1,6 @@
 import sys
 import csv
 import os
-from sourcefiles.cosine_similarity import get_cosine_similarity
 import torch
 import numpy as np
 
@@ -9,64 +8,6 @@ import numpy as np
 # uncomment the top one if your GPU has >12GB vram
 # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DEVICE = "cpu"
-
-
-# ques: WHY do we need cosine similarity for knn? this makes no damn sense
-def cosine_similarity_knn(list_1, list_2):
-    """
-    Gets the cosine_similarity of two lists and adjusts it to be used in the
-    KNN algorithm
-    """
-    cs = get_cosine_similarity(list_1, list_2)
-    return 1 - cs
-
-
-# cmt: commenting cuz I don't use it anyore
-# def get_knn_predictions(test_list, train_list, labels, k):
-#     """
-#     Trains the KNN algorithm on the train_list and labels then passes
-#     the test_list to get a prediction for each element in the test_list.
-#     :param train_list: A list full of features averages to train the KNN algorithm.
-#     :param test_list: A list full of features averages to test the KNN algorithm.
-#     :param labels: A list of labels for each list of features averages. Label
-#     values are taken from participant.group_label.
-#     :param k: The value of k for the kNN algorithm.
-#     :return: a list of strings signifying if each features averages in the test
-#     list was given a prediction of SLI or TD.
-#     """
-    
-#     print("--- start of knn ---") # debug
-    
-#     # cmt: dim of train_list & test_list = [<num_clips>, 1024]
-#     device = "cuda" if torch.cuda.is_available() else "cpu"
-#     train_list = torch.tensor(train_list).to(device)
-#     test_list = torch.tensor(test_list).to(device)
-    
-#     # get the indices of K nearest neighbors to each of our test clips
-#     # distances dim: [test_list, train_list]
-#     distances = torch.cosine_similarity(train_list[None, :, :], test_list[:, None, :], dim=-1)
-    
-#     # get neighbors with highest cosine similarity
-#     # dim: [test_list, k]
-#     _, nearest_indices = torch.topk(distances, k=k, dim=-1)
-    
-#     # map all indices to the corresponding class
-#     # labels are received as strings, so we first convert them to integers
-#     labels_int_to_string = tuple(set(labels))
-#     labels_string_to_int = {s: i for i, s in enumerate(labels_int_to_string)}
-#     int_labels = torch.tensor([labels_string_to_int[s] for s in labels]).to(device)
-#     nearest_int_labels = int_labels[nearest_indices]
-    
-#     # get the most common label for each inference input
-#     knn_results, _ = torch.mode(nearest_int_labels)
-    
-#     # changes int labels back to string
-#     knn_results = [labels_int_to_string[i] for i in knn_results]
-    
-#     print("--- end of knn ---") # debug
-    
-#     return knn_results
-#     # note: (done) ported till here ^^, vv in progress
 
 
 class Participant:
@@ -106,13 +47,9 @@ class Clip:
     method in the FeatureExtractor class.
     """
     def __init__(self, features_averages: torch.tensor, clip_name):
-        # self.layers = {i: list(features) for i, features in enumerate(features_averages)}
+        # note that indices are from 0 to 23
         self.layers : torch.tensor = features_averages # dim: [24, 1024]
         self.clip_name = clip_name
-
-    # cmt: note that now the indices start from 0!
-    def get_transformation_layer(self, layer_idx):
-        return self.layers[layer_idx]
 
     def to_dict(self):
         return {'layers': self.layers, 'clip_name': self.clip_name}
@@ -124,9 +61,7 @@ class Clip:
         return clip
 
 
-# ques: I don't fully get what this is supposed to do...
 class ParticipantResults:
-    # ques: what are the reuslts here? prediction of whether they're typical or atypical?
     """
     Gets the predictions for a participant and calculates the results
     Each layer of hubert has a different set of labels for the participant's clips
@@ -137,17 +72,13 @@ class ParticipantResults:
     def __init__(self, participant_id, group_label, layers_predictions, clip_names, num_layers=24):
         self.participant_id = participant_id
         self.group_label = group_label
-        # cmt: for each layer, stores a list of the label that layer gave to each track
         self.layers_predictions = {i: predictions for i, predictions in enumerate(layers_predictions)}
         self.clip_names = clip_names
-        # cmt: shows that the system correctly predicted a certain track
         self.clip_results = {name: [] for name in self.clip_names}
-        # cmt: shows what layers predicted correctly more than incorrectly on average
         self.layers_results = {i: None for i in range(num_layers)}
         self.winner = False
         self.calculate_results()
 
-    # cmt: literally just populates the data structures above
     def calculate_results(self):
         """
         Iterate through the predictions of each layer.
@@ -177,8 +108,6 @@ class ParticipantResults:
         for idx, prediction in enumerate(self.layers_predictions[layer_idx]):
             self.clip_results[self.clip_names[idx]].append(prediction == self.group_label)
 
-    # cmt: read till here ^^
-    # ans: what is self.clip_results?? --> holds which layers classified which audio tracks correctly
     def get_clip_results(self):
         """
         This method goes through the self.clip_results and for each clip,
@@ -229,7 +158,6 @@ class TypicalClassifier:
     def run(self):
         if hasattr(self, 'non_aug_participants'):
             print("Augmented and non-augmented datasets detected. Using hybrid evaluation.")
-            # FIXME: revert
             self.process_all_participants_hybrid()
         else:
             self.process_all_participants()
@@ -257,66 +185,11 @@ class TypicalClassifier:
             self.seen_participant_ids.add(participant.participant_id)
             self.process_single_participant(participant)
         
-    
-    # def process_single_participant_new(self, participant):
-    #     # FIXME: (done)
-        
-    #     """
-    #     makes a single participant be the test data while the rest of the participants
-    #     are used to train the knn algorithm.
-    #     :param participant: Participant object representing participant to be tested
-    #     :param group_label:
-    #     :return:
-    #     """
-    #     participant_id = participant.participant_id
-        
-    #     if participant_id in self.seen_participant_ids:
-    #         print(f'ERROR participant {participant_id} already processed. Duplicate IDs')
-    #         sys.exit()
-    #     self.seen_participant_ids.add(participant_id)
-        
-    #     group_label = participant.group_label
-    #     print(f"processing participant {participant_id}")
-        
-    #     # this section ported from get_train_test()
-        
-    #     # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
-    #     # test_clips_names dim: [<num_clips_test>] (stores the literal wav paths)
-    #     # train_clips dim: [24, <num_clips_train>, 1024] (each person can have multiple)
-    #     # train_labels dim: [<num_clips_train>]
-        
-    #     test_clips, test_clips_names, train_clips, train_labels = self.get_train_test(participant_id)
-        
-    # FIXME: revert
     def process_single_participant_hybrid(self, non_aug_participant):
-    #     # note: ported till here ^^
         """
         Same as `process_single_participang`, but uses augmented participants
         for training and normal participants for testing.
         """
-    #     participant_id = non_aug_participant.participant_id
-        
-    #     # if participant_id in self.seen_participant_ids:
-    #     #     print(f'ERROR participant {participant_id} already processed. Duplicate IDs')
-    #     #     sys.exit()
-    #     # self.seen_participant_ids.add(participant_id)
-        
-    #     group_label = non_aug_participant.group_label
-    #     print(f"processing participant {participant_id} (hybrid method)")
-
-    #     test_clips, test_clips_names, train_clips, train_labels = self.get_train_test_hybrid(participant_id)
-    #     predictions = self.get_predictions(test_clips, train_clips, train_labels)
-
-    #     non_aug_participant.add_results(group_label, predictions, test_clips_names)
-
-    #     outcome = 'winners' if non_aug_participant.results.winner else 'losers'
-    #     label_type = 'typical' if non_aug_participant.group_label == self.typical_label else 'atypical'
-
-    #     # Increment the total outcome counter
-    #     self.counters[outcome]['total'] += 1
-
-    #     # Increment the specific label type outcome counter
-    #     self.counters[outcome][label_type] += 1
     
         participant_id = non_aug_participant.participant_id
         
@@ -333,12 +206,10 @@ class TypicalClassifier:
 
         # Increment the total outcome counter
         self.counters[outcome]['total'] += 1
-        # note: ported till here ^^, vv is in progress
 
         # Increment the specific label type outcome counter
         self.counters[outcome][label_type] += 1
     
-    # cmt: okay it doesn't have a global KNN, so why this deadlocks is beyond me
     def process_single_participant(self, participant):
         """
         makes a single participant be the test data while the rest of the participants
@@ -348,11 +219,6 @@ class TypicalClassifier:
         :return:
         """
         participant_id = participant.participant_id
-        
-        # if participant_id in self.seen_participant_ids:
-        #     print(f'ERROR participant {participant_id} already processed. Duplicate IDs')
-        #     sys.exit()
-        # self.seen_participant_ids.add(participant_id)
         
         group_label = participant.group_label
         print(f"processing participant {participant_id}")
@@ -367,12 +233,10 @@ class TypicalClassifier:
 
         # Increment the total outcome counter
         self.counters[outcome]['total'] += 1
-        # note: ported till here ^^, vv is in progress
 
         # Increment the specific label type outcome counter
         self.counters[outcome][label_type] += 1
 
-    # TODO: this would benefit from a dictionary data structure instead of lists
     def get_train_test_hybrid(self, participant_id):
         """
         Same as `get_train_test`, but sources the train data from augmented
@@ -380,28 +244,6 @@ class TypicalClassifier:
         :param participant_id: participant_id of participant to be tested
         :return: test_clips, test_clip_names, train_clips, train_labels
         """
-        # test_clips = []
-        # test_clips_names = []
-        # train_clips = []
-        # train_labels = []
-        # # assuming exact parity between 
-        # for (aug_participant, non_aug_participant) in zip(self.aug_participants, self.non_aug_participants):
-        #     if non_aug_participant.participant_id == participant_id:
-        #         test_clips = non_aug_participant.clips
-        #         test_clips_names = [clip.clip_name for clip in test_clips]
-        #     else:
-        # note: comparison pointer
-        #         train_clips += aug_participant.clips
-        #         train_labels += [aug_participant.group_label for _ in range(aug_participant.get_num_clips())]
-        # return test_clips, test_clips_names, train_clips, train_labels
-    
-        # ported stuff -----------------------
-        
-        # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
-        # test_clips_names dim: [<num_clips_test>] (stores the literal wav paths)
-        # train_clips dim: [24, <num_clips_train>, 1024] (each person can have multiple)
-        # train_labels dim: [<num_clips_train>]
-        
         test_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
         test_clips_names = []
         train_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
@@ -428,28 +270,6 @@ class TypicalClassifier:
         :param participant_id: participant_id of participant to be tested
         :return: test_clips, test_clip_names, train_clips, train_labels
         """
-        # test_clips = []
-        # test_clips_names = []
-        # train_clips = []
-        # train_labels = []
-        # for participant in self.participants_list:
-        #     if participant.participant_id == participant_id:
-        #         test_clips = participant.clips
-        #         test_clips_names = [clip.clip_name for clip in test_clips]
-        #     else:
-        # note: comparison pointer
-        #         train_clips += participant.clips
-        #         train_labels += [participant.group_label for _ in range(participant.get_num_clips())]
-        # return test_clips, test_clips_names, train_clips, train_labels
-        # note: (done) ported till here ^^, vv is in progress
-        
-        # refactored -------------------------
-        
-        # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
-        # test_clips_names dim: [<num_clips_test>] (stores the literal wav paths)
-        # train_clips dim: [24, <num_clips_train>, 1024] (each person can have multiple)
-        # train_labels dim: [<num_clips_train>]
-        
         test_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
         test_clips_names = []
         train_clips = torch.zeros([24, 0, 1024]).to(DEVICE)
@@ -474,18 +294,6 @@ class TypicalClassifier:
         :param train_labels:
         :return:
         """
-        # all_layers_predictions = []
-        # for layer_idx in range(1, self.num_layers + 1):
-        #     test_clips_features = self.get_layer_features(layer_idx, test_clips)
-        #     train_clips_features = self.get_layer_features(layer_idx, train_clips)
-        #     predictions = get_knn_predictions(test_clips_features, train_clips_features, train_labels, self.k)
-        #     all_layers_predictions.append(predictions)
-        # return all_layers_predictions
-            # # note: (done) commented unused funcs till here ^^, vv in progress
-            # # note: (done) ported till here ^^, vv in progress
-    
-        # refactored ---------------------
-        # FIXME: (done)
         print("--- start of knn for all 24 ---")
         
         # test_clips dim: [24, <num_clips_test>, 1024] (each person can have multiple)
@@ -503,7 +311,8 @@ class TypicalClassifier:
         
         # map all indices to the corresponding class
         # labels are received as strings, so we first convert them to integers
-        train_labels = np.asarray(train_labels) # dim: [24, <num_clips_train>] cmt: check this
+        # dim: [24, <num_clips_train>]
+        train_labels = np.asarray(train_labels) 
         labels_int_to_string = tuple(set(train_labels.flatten()))
         labels_string_to_int = {s: i for i, s in enumerate(labels_int_to_string)}
         int_train_labels = torch.tensor(np.vectorize(lambda x: labels_string_to_int[x])(train_labels)).to(DEVICE)
@@ -522,16 +331,6 @@ class TypicalClassifier:
         print("--- end of knn for all 24 ---")
         
         return list(predictions)
-
-    # cmt: commenting cuz I don't use it anymore
-    # def get_layer_features(self, layer_idx, clips_list):
-    #     """
-    #     gets the features for each clip processed by a single layer
-    #     :param layer_idx: Layer to be processed
-    #     :param clips_list: List of Clip objects.
-    #     :return:
-    #     """
-    #     return [clip.get_transformation_layer(layer_idx) for clip in clips_list]
 
     def print_results(self):
         print(f"total num winners = {self.counters['winners']['total']}")
