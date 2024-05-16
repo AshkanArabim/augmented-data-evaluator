@@ -1,5 +1,5 @@
 # Augmented Data Evaluator
-Two scripts that evaluate the performance of a KNN model (paper documenting the KNN model's architecture will be added once it's published) given normal or augmented datasets.
+Two scripts that evaluate the performance of a KNN model (paper documenting the KNN model's architecture will be added once it's published) given normal or augmented datasets containing speaking audio samples from autistic and neurotypical people.
 
 **NOTE**: The `sourcefiles` directory is sourced from [this repo](https://github.com/andysegura89/Pragmatic_Similarity_ISG) by Andres Segura. Some modifications were made (e.g. re-implementing KNN in PyTorch, support for two datasets, etc.) to add minor features / performance optimizations.
 
